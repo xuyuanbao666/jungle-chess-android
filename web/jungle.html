@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>斗兽棋</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: #1a2b45;
+    color: #eef3fb;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex; flex-direction: column;
+    touch-action: manipulation;
+    overflow: hidden;
+    user-select: none; -webkit-user-select: none;
+  }
+  #top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+    gap: 8px; flex: 0 0 auto;
+  }
+  .title { font-size: 20px; font-weight: 700; letter-spacing: 2px; }
+  .badge {
+    font-size: 13px; padding: 5px 12px; border-radius: 999px;
+    background: #2a4066; white-space: nowrap;
+  }
+  .badge.red { background: #7a2d2d; }
+  .badge.blue { background: #24508a; }
+  .badge.win { background: #2f7a3e; font-weight: 700; }
+
+  #stage { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; padding: 4px; min-height: 0; }
+  #boardWrap { position: relative; }
+  #board {
+    display: grid;
+    background: #caa15a;
+    border: 3px solid #5b3d1a;
+    border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.5);
+    touch-action: none;
+  }
+  .cell {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(91,61,26,.35);
+    font-size: 26px;
+  }
+  .cell.river { background: #5aa7d6; }
+  .cell.lion-bg { background: #e8d9ae; }
+  .cell .piece {
+    width: 82%; height: 82%;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    font-size: 22px; font-weight: 700;
+    box-shadow: 0 2px 4px rgba(0,0,0,.4);
+    position: relative; z-index: 2;
+  }
+  .piece.blue { background: #3b76c9; color: #fff; border: 2px solid #bcd8ff; }
+  .piece.red  { background: #cc4d4d; color: #fff; border: 2px solid #ffc9c9; }
+  .cell.dens.blueDens { background: #2a5f9e; }
+  .cell.dens.redDens  { background: #9e3838; }
+  .cell.trap.blueTrap { background: #3e6fa8; }
+  .cell.trap.redTrap  { background: #a85252; }
+  .cell.selected { outline: 3px solid #ffd93b; outline-offset: -3px; z-index: 3; }
+  .cell.hint::after {
+    content: ""; position: absolute; inset: 0;
+    background: rgba(255, 240, 120, .45);
+    border-radius: 4px; z-index: 1;
+  }
+  .cell.hint-eat::after { background: rgba(255, 90, 90, .5); }
+
+  #bottom { flex: 0 0 auto; padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; }
+  #status { font-size: 14px; text-align: center; min-height: 18px; color: #cdd9ee; }
+  #ctrl { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  button {
+    font-family: inherit; font-size: 15px;
+    padding: 9px 16px; border: none; border-radius: 8px;
+    background: #2a4066; color: #eef3fb; cursor: pointer;
+  }
+  button:active { transform: scale(.96); }
+  button.primary { background: #2f7a3e; font-weight: 700; }
+
+  /* 规则/结束 弹层 */
+  .overlay {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,.72);
+    display: none; align-items: center; justify-content: center; padding: 18px;
+  }
+  .overlay.show { display: flex; }
+  .panel {
+    background: #233654; border-radius: 14px; max-width: 460px; width: 100%;
+    max-height: 86vh; overflow-y: auto; padding: 18px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  }
+  .panel h2 { font-size: 20px; margin-bottom: 10px; text-align: center; }
+  .panel p, .panel li { font-size: 14px; line-height: 1.7; color: #d7e1f2; }
+  .panel ul { padding-left: 18px; margin: 6px 0; }
+  .panel .row { display: flex; gap: 8px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+  .rank { color: #ffd93b; font-weight: 700; }
+  .legend { display:flex; gap:6px; justify-content:center; margin-top:4px; flex-wrap:wrap; }
+  .legend span { background:#2a4066; border-radius:6px; padding:3px 8px; font-size:12px; }
+</style>
+</head>
+<body>
+  <div id="top">
+    <div class="title">斗兽棋</div>
+    <div id="turn" class="badge blue">蓝方 回合</div>
+    <div id="score" class="badge">红0 : 0蓝</div>
+  </div>
+
+  <div id="stage">
+    <div id="boardWrap"><div id="board"></div></div>
+  </div>
+
+  <div id="bottom">
+    <div id="status">点选己方棋子，再点高亮格移动</div>
+    <div id="ctrl">
+      <button id="btnMode" class="primary">模式：人机</button>
+      <button id="btnRestart">重新开始</button>
+      <button id="btnRule">规则</button>
+    </div>
+  </div>
+
+  <!-- 规则面板 -->
+  <div class="overlay" id="ruleOv">
+    <div class="panel">
+      <h2>斗兽棋规则</h2>
+      <p>双方各有 8 兽，等级由强到弱：</p>
+      <p class="rank">象(8) &gt; 狮(7) &gt; 虎(6) &gt; 豹(5) &gt; 狗(4) &gt; 狼(3) &gt; 猫(2) &gt; 鼠(1)</p>
+      <ul>
+        <li>每回合把己方一子向上/下/左/右移动一格。</li>
+        <li>可吃等级 <b>不高于自己</b> 的敌子（同级可吃）。</li>
+        <li><b>鼠可吃象</b>；<b>象不能吃河中的鼠</b>。</li>
+        <li>仅 <b>鼠</b> 能进河；河中鼠可吃岸上鼠。</li>
+        <li>敌子进入你的<b>陷阱</b>后，你任意子都能吃它。</li>
+        <li>任一兽进对方<b>兽穴</b>即胜；或吃光对方全部棋子获胜。</li>
+      </ul>
+      <p>棋盘水域：中间两片蓝格为河，两侧为地面通道。</p>
+      <div class="row"><button id="ruleClose" class="primary">知道了</button></div>
+    </div>
+  </div>
+
+  <!-- 胜负面板 -->
+  <div class="overlay" id="endOv">
+    <div class="panel">
+      <h2 id="endTitle">对局结束</h2>
+      <p id="endDesc" style="text-align:center"></p>
+      <div class="row">
+        <button id="endAgain" class="primary">再来一局</button>
+        <button id="endRule">看规则</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+"use strict";
+(function () {
+  // ---------- 常量：棋盘 9 行 x 7 列 ----------
+  var ROWS = 9, COLS = 7;
+  // 等级 1..8：鼠1 猫2 狼3 狗4 豹5 虎6 狮7 象8
+  var RANK = { M:1, C:2, W:3, D:4, P:5, T:6, L:7, E:8 };
+  var NAME = { M:"鼠", C:"猫", W:"狼", D:"狗", P:"豹", T:"虎", L:"狮", E:"象" };
+  var EMO  = { M:"🐭", C:"🐱", W:"🐺", D:"🐶", P:"🐆", T:"🐯", L:"🦁", E:"🐘" };
+
+  // 河：两片 3x2 水域（列 1-2 与 4-5，行 3-4）—— 标准斗兽棋
+  function isRiver(r, c) {
+    return (r === 3 || r === 4) && (c === 1 || c === 2 || c === 4 || c === 5);
+  }
+  // 兽穴
+  var DENS = { red: {r:0, c:3}, blue: {r:8, c:3} };
+  // 陷阱
+  var TRAPS = {
+    red:  [{r:0,c:2},{r:0,c:4},{r:1,c:3}],
+    blue: [{r:8,c:2},{r:8,c:4},{r:7,c:3}]
+  };
+  function trapOwner(r, c) {
+    var t, i;
+    t = TRAPS.red;  for (i=0;i<t.length;i++) if (t[i].r===r && t[i].c===c) return "red";
+    t = TRAPS.blue; for (i=0;i<t.length;i++) if (t[i].r===r && t[i].c===c) return "blue";
+    return null;
+  }
+  function inBoard(r, c) { return r>=0 && r<ROWS && c>=0 && c<COLS; }
+
+  // ---------- 初始布局 ----------
+  // 红方(上方) 底线 r=0；蓝方(下方) 底线 r=8
+  var INIT = [
+    // [side, type, r, c]
+    ["red","L",0,0], ["red","T",0,6], ["red","P",1,1], ["red","W",1,5],
+    ["red","D",2,0], ["red","C",2,2], ["red","M",2,4], ["red","E",2,6],
+    ["blue","T",8,0], ["blue","L",8,6], ["blue","W",7,1], ["blue","P",7,5],
+    ["blue","D",6,0], ["blue","M",6,2], ["blue","C",6,4], ["blue","E",6,6]
+  ];
+
+  // ---------- 状态 ----------
+  var board, turn, mode, over, sel, captured;
+  var HUMAN = "blue"; // 人控制蓝方
+
+  function reset() {
+    var r, c;
+    board = [];
+    for (r=0;r<ROWS;r++){ board.push([]); for(c=0;c<COLS;c++) board[r].push(null); }
+    INIT.forEach(function(p){
+      board[p[2]][p[3]] = { side:p[0], type:p[1], rank:RANK[p[1]] };
+    });
+    turn = "blue"; over = false; sel = null; captured = { red:0, blue:0 };
+    render(); setStatus("点选己方棋子，再点高亮格移动");
+    updateBadges();
+    hide("endOv");
+  }
+
+  // ---------- 规则判断 ----------
+  // 单元格是否允许 side 的 t(类型) 进入
+  function canEnter(r, c, t) {
+    if (!inBoard(r,c)) return false;
+    if (isRiver(r,c)) return t === "M";       // 只有鼠可进河
+    return true;
+  }
+  // 一个敌方棋子在 (r,c) 是否处于己方 side 的陷阱（可被任意吃）
+  function inMyTrap(r, c, side) {
+    var o = trapOwner(r,c);
+    return o !== null && o !== side && o !== null && o !== side && (o !== side);
+  }
+  // 是否能从 (fr,fc) 的攻击者 吃 (tr,tc) 的防守者
+  function canEat(att, dr, dc, def) {
+    var ar = att.rank, dr_ = def.rank;
+    var attRiver = isRiver(att._r, att._c);
+    var defRiver = isRiver(dr, dc);
+
+    // 防守方在攻击方（side）的陷阱里 -> 任意可吃
+    var trap = trapOwner(dr, dc);
+    if (trap !== null && trap !== att.side) return true;
+
+    // 象不吃河中的鼠
+    if (att.type === "E" && def.type === "M" && defRiver) return false;
+    // 鼠吃象（无论河岸）
+    if (att.type === "M" && def.type === "E") return true;
+    // 河中鼠吃岸上鼠 / 同级
+    if (dr_ <= ar) return true;
+    return false;
+  }
+
+  // 返回 (r,c) 处、side 方的棋子所有合法目标 [{r,c,eat}]
+  function movesFrom(r, c) {
+    var p = board[r][c];
+    if (!p) return [];
+    var dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+    var out = [], i, nr, nc, t;
+    p._r = r; p._c = c; // 供 canEat 用
+    for (i=0;i<4;i++){
+      nr = r + dirs[i][0]; nc = c + dirs[i][1];
+      if (!inBoard(nr,nc)) continue;
+      t = board[nr][nc];
+      if (t === null) {
+        if (canEnter(nr, nc, p.type)) out.push({r:nr, c:nc, eat:false});
+      } else if (t.side !== p.side) {
+        // 进河吃河中目标也算
+        if (canEnter(nr, nc, p.type) && canEat(p, nr, nc, t)) out.push({r:nr, c:nc, eat:true});
+      }
+    }
+    return out;
+  }
+
+  // 侧是否有任何合法走法
+  function hasMove(side) {
+    var r, c, p, m;
+    for (r=0;r<ROWS;r++) for (c=0;c<COLS;c++){
+      p = board[r][c];
+      if (p && p.side === side) {
+        m = movesFrom(r,c);
+        if (m.length) return true;
+      }
+    }
+    return false;
+  }
+
+  function makeMove(fr, fc, tr, tc) {
+    var att = board[fr][fc], def = board[tr][tc];
+    if (def) captured[def.side]++;
+    board[tr][tc] = att; board[fr][fc] = null;
+
+    // 胜负：进对方穴
+    var den = DENS[att.side === "blue" ? "red" : "blue"];
+    if (tr === den.r && tc === den.c) { finish(att.side, "攻入对方兽穴"); return; }
+    // 吃光对方
+    var side = att.side, other = side === "blue" ? "red" : "blue";
+    if (countSide(other) === 0) { finish(side, "吃光对方全部棋子"); return; }
+    // 无路可走
+    turn = other;
+    if (!hasMove(turn)) { finish(side, "对方无棋可走"); return; }
+    turn = other;
+    updateBadges();
+    setStatus((turn === "blue" ? "蓝方" : "红方") + " 回合");
+    if (mode === "ai" && turn === "red") {
+      setStatus("红方思考中…");
+      setTimeout(aiTurn, 260);
+    }
+  }
+
+  function countSide(side){ var n=0,r,c; for(r=0;r<ROWS;r++)for(c=0;c<COLS;c++){var p=board[r][c]; if(p&&p.side===side)n++;} return n; }
+
+  function finish(side, why) {
+    over = true; sel = null;
+    var win = side === HUMAN ? "你赢了！🎉" : (mode === "ai" ? "红方获胜 😅" : (side==="blue"?"蓝方获胜":"红方获胜"));
+    updateBadges(side);
+    render();
+    var title = (mode === "ai") ? win : ((side === "blue" ? "蓝方" : "红方") + " 获胜 🎉");
+    document.getElementById("endTitle").textContent = title;
+    document.getElementById("endDesc").textContent = why + "。" +
+      (mode === "ai" ? (side === HUMAN ? "厉害，攻占了对方阵地！" : "别灰心，再来一局。") : "");
+    show("endOv");
+  }
+
+  // ---------- 简单 AI（红方） ----------
+  function aiTurn() {
+    if (over) return;
+    var candidates = [], r, c, p, m, i, j, mv, score;
+    for (r=0;r<ROWS;r++) for (c=0;c<COLS;c++){
+      p = board[r][c];
+      if (p && p.side === "red") {
+        m = movesFrom(r,c);
+        for (i=0;i<m.length;i++){
+          mv = m[i];
+          score = 0;
+          if (mv.eat) score += 50 + board[mv.r][mv.c].rank;   // 优先吃，且吃大的好
+          // 进对方(蓝)穴一步获胜
+          if (mv.r === DENS.blue.r && mv.c === DENS.blue.c) score += 1000;
+          // 逼近蓝方穴
+          var before = Math.abs(r - DENS.blue.r) + Math.abs(c - DENS.blue.c);
+          var after  = Math.abs(mv.r - DENS.blue.r) + Math.abs(mv.c - DENS.blue.c);
+          score += (before - after) * 2;
+          // 避免走进可被吃的格（简单检查：移动后是否被蓝方任意子可吃）
+          score += Math.random() * 3;
+          candidates.push({r:r, c:c, to:mv, s:score});
+        }
+      }
+    }
+    if (!candidates.length) { finish("blue", "红方无棋可走"); return; }
+    candidates.sort(function(a,b){ return b.s - a.s; });
+    // 80% 取最优，20% 随机（避免太死板）
+    var pick = (Math.random() < 0.8) ? candidates[0]
+             : candidates[Math.floor(Math.random()*Math.min(candidates.length,4))];
+    makeMove(pick.r, pick.c, pick.to.r, pick.to.c);
+  }
+
+  // ---------- 交互 ----------
+  function onCell(r, c) {
+    if (over) return;
+    if (mode === "ai" && turn !== HUMAN) return;
+    var p = board[r][c];
+    var cur = turn;
+
+    if (sel) {
+      var m = movesFrom(sel.r, sel.c), hit = null, i;
+      for (i=0;i<m.length;i++) if (m[i].r===r && m[i].c===c) { hit = m[i]; break; }
+      if (hit) {
+        var fr = sel.r, fc = sel.c;
+        sel = null;
+        makeMove(fr, fc, r, c);
+        render();
+        return;
+      }
+      // 点到己方另一子 -> 换选
+      if (p && p.side === cur) { sel = {r:r, c:c}; render(); setStatus("已选 " + NAME[p.type] + "，点高亮格移动"); return; }
+      sel = null; render(); return;
+    }
+    if (p && p.side === cur) {
+      sel = {r:r, c:c}; render();
+      setStatus("已选 " + NAME[p.type] + "（" + p.rank + "级），点高亮格移动");
+    }
+  }
+
+  // ---------- 渲染 ----------
+  function buildBoard() {
+    var b = document.getElementById("board");
+    b.style.gridTemplateColumns = "repeat(" + COLS + ", 1fr)";
+    b.style.gridTemplateRows = "repeat(" + ROWS + ", 1fr)";
+    // 尺寸：按舞台适配
+    b.style.width = "min(94vw, " + (COLS*54) + "px, " + Math.floor((COLS/ROWS)*78) + "vh)";
+    b.style.height = "min(94vw, " + (ROWS*54) + "px)";
+    // 用宽高比保证行高
+    b.style.aspectRatio = COLS + " / " + ROWS;
+    b.style.height = "";
+    var r, c, cell;
+    for (r=0;r<ROWS;r++) for (c=0;c<COLS;c++){
+      cell = document.createElement("div");
+      cell.className = "cell";
+      cell.dataset.r = r; cell.dataset.c = c;
+      if (isRiver(r,c)) cell.classList.add("river");
+      if (r===DENS.red.r && c===DENS.red.c) cell.classList.add("dens","redDens");
+      if (r===DENS.blue.r && c===DENS.blue.c) cell.classList.add("dens","blueDens");
+      var to = trapOwner(r,c);
+      if (to === "red") cell.classList.add("trap","redTrap");
+      if (to === "blue") cell.classList.add("trap","blueTrap");
+      // 事件（touch + mouse 统一）
+      (function(rr, cc){
+        var handler = function(e){ e.preventDefault(); onCell(rr, cc); };
+        cell.addEventListener("touchstart", handler, {passive:false});
+        cell.addEventListener("mousedown", handler);
+      })(r, c);
+      b.appendChild(cell);
+    }
+  }
+
+  function render() {
+    var cells = document.querySelectorAll("#board .cell");
+    var hints = sel ? movesFrom(sel.r, sel.c) : [];
+    var hintMap = {}, i;
+    for (i=0;i<hints.length;i++) hintMap[hints[i].r+"_"+hints[i].c] = hints[i].eat;
+
+    for (i=0;i<cells.length;i++){
+      var cell = cells[i];
+      var r = +cell.dataset.r, c = +cell.dataset.c;
+      var p = board[r][c];
+      cell.classList.remove("selected","hint","hint-eat");
+      // 棋子
+      var old = cell.querySelector(".piece");
+      if (old) old.remove();
+      if (p) {
+        var el = document.createElement("div");
+        el.className = "piece " + p.side;
+        el.textContent = EMO[p.type];
+        el.title = NAME[p.type];
+        cell.appendChild(el);
+      }
+      if (sel && sel.r===r && sel.c===c) cell.classList.add("selected");
+      var h = hintMap[r+"_"+c];
+      if (h === true) cell.classList.add("hint-eat");
+      else if (h === false) cell.classList.add("hint");
+    }
+  }
+
+  function updateBadges(winner) {
+    var t = document.getElementById("turn");
+    if (winner) { t.className = "badge win"; t.textContent = "游戏结束"; }
+    else { t.className = "badge " + turn; t.textContent = (turn === "blue" ? "蓝方" : "红方") + " 回合"; }
+    document.getElementById("score").textContent = "红" + captured.red + " : " + captured.blue + "蓝";
+  }
+  function setStatus(s){ document.getElementById("status").textContent = s; }
+  function show(id){ document.getElementById(id).classList.add("show"); }
+  function hide(id){ document.getElementById(id).classList.remove("show"); }
+
+  // ---------- 控件 ----------
+  function bindUI() {
+    document.getElementById("btnRestart").onclick = function(){ reset(); };
+    document.getElementById("btnRule").onclick = function(){ show("ruleOv"); };
+    document.getElementById("ruleClose").onclick = function(){ hide("ruleOv"); };
+    document.getElementById("endAgain").onclick = function(){ reset(); };
+    document.getElementById("endRule").onclick = function(){ hide("endOv"); show("ruleOv"); };
+    document.getElementById("btnMode").onclick = function(){
+      mode = (mode === "ai") ? "pvp" : "ai";
+      document.getElementById("btnMode").textContent = "模式：" + (mode === "ai" ? "人机" : "双人");
+      reset();
+    };
+  }
+
+  // ---------- 启动 ----------
+  function init() {
+    mode = "ai";
+    buildBoard();
+    bindUI();
+    reset();
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+</script>
+</body>
+</html>
